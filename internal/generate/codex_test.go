@@ -66,6 +66,45 @@ func TestCodexReadablePaths(t *testing.T) {
 	}
 }
 
+func TestFindExecutableSymlink(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		body   string
+		native bool
+	}{
+		{"ELF", "\x7fELF...", true},
+		{"Mach-O", "\xcf\xfa\xed\xfe...", true},
+		{"wrapper", "#!/bin/sh\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			real := filepath.Join(dir, "installed-codex")
+			if err := os.WriteFile(real, []byte(tc.body), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(dir, "codex")
+			if err := os.Symlink(real, link); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir)
+			path, resolved, err := findExecutable("codex")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := link
+			if tc.native {
+				want = real
+			}
+			if path != want || resolved != real {
+				t.Errorf("findExecutable = (%q, %q), want (%q, %q)", path, resolved, want, real)
+			}
+		})
+	}
+}
+
 // Lines recorded from codex-cli 0.160.1 `codex exec --json` (paths shortened).
 const codexSample = `{"type":"thread.started","thread_id":"01a12672-35b4-7341-9e8f-bedf520d2ccd"}
 {"type":"item.completed","item":{"id":"item_0","type":"error","message":"Codex is ignoring 1 unrecognized configuration setting."}}

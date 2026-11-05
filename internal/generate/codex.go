@@ -133,7 +133,9 @@ func isNativeBinary(path string) bool {
 	return false
 }
 
-// findExecutable returns bin's path on PATH and its real path with symlinks followed.
+// findExecutable returns bin's launch path and its real path with symlinks followed.
+// Native binaries use their real path so sandbox helpers can re-execute them on macOS.
+// Wrappers keep their PATH entry because shims may depend on their invocation name.
 func findExecutable(bin string) (path, real string, err error) {
 	if path, err = exec.LookPath(bin); err != nil {
 		return "", "", err
@@ -142,6 +144,9 @@ func findExecutable(bin string) (path, real string, err error) {
 		return "", "", err
 	}
 	real, err = filepath.EvalSymlinks(path)
+	if err == nil && isNativeBinary(real) {
+		path = real
+	}
 	return path, real, err
 }
 
@@ -213,7 +218,6 @@ func (c Codex) Run(ctx context.Context, dir, prompt string, events func(Event)) 
 	if bin == "" {
 		bin = "codex"
 	}
-	// Run what is on PATH (a shim needs its own name), but grant what it really is.
 	path, real, err := findExecutable(bin)
 	if err != nil {
 		return Result{}, err
